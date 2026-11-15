@@ -1,0 +1,19 @@
+{
+  "name": "@svyaz-est/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@svyaz-est/contracts": "*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}
