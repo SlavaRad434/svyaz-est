@@ -1,0 +1,115 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Главное действие не менее 44 px по высоте (wireframe README, доступность).
+   Класс применяется точечно к CTA, чтобы не растягивать служебные кнопки xs. */
+.tap-target {
+  min-height: 44px;
+}
+
+/* Шапка: одна строка на десктопе; на узких экранах действия уходят
+   на вторую строку управляемо, без скачков flexWrap. */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  flex-wrap: wrap;
+}
+
+.app-header__actions {
+  margin-left: auto;
+}
+
+@media (max-width: 26em) {
+  .app-header__actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
+/* Контент внутри корневого flex-столбца: прокрутка держит шапку на месте. */
+.app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  background: #eef1f4;
+  overflow: hidden;
+  /* Слои карты (transform-панели Leaflet) не должны соревноваться
+     с оверлеями за пределами своего контекста наложения. */
+  isolation: isolate;
+}
+
+.map-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Оверлеи выше панелей Leaflet (тайлы 200, маркеры 600, попапы 700),
+   иначе листы карты перекрывают кнопки при отрисовке. */
+.map-overlay {
+  position: absolute;
+  z-index: 800;
+}
+
+.map-overlay--legend {
+  top: 12px;
+  right: 12px;
+}
+
+/* Баннер не заходит под легенду: до 62em справа компактный переключатель
+   легенды (около 64 px), с 62em — карточка легенды (около 136 px). */
+.map-overlay--banner {
+  top: 12px;
+  left: 56px;
+  right: 88px;
+  max-width: 420px;
+}
+
+@media (min-width: 62em) {
+  .map-overlay--banner {
+    right: 148px;
+  }
+}
+
+.map-overlay--filters {
+  bottom: 12px;
+  right: 12px;
+  z-index: 900;
+}
+
+.zone-card-dock {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 850;
+  max-width: 560px;
+}
+
+.filters-aside {
+  width: 280px;
+  padding: 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--mantine-color-default-border);
+}
+
+@media (max-width: 62em) {
+  .filters-aside {
+    display: none;
+  }
+}
