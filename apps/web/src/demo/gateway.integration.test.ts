@@ -157,4 +157,72 @@ describe('DemoGateway — интеграция', () => {
     const byAttempt = gateway.store.list().filter((o) => o.attemptId === attemptId);
     expect(byAttempt).toHaveLength(1);
   });
+
+  it('модерация недоступна без роли администратора (NFR-04)', async () => {
+    const gateway = new DemoGateway(new Date(NOW));
+    gateway.store.setRole('guest');
+    const row = (await gateway.getAdminObservations())[0]!;
+    await expect(gateway.moderateObservation(row.id, 'hide', 'DATA_ERROR')).rejects.toThrow(
+      'DEMO_FORBIDDEN',
+    );
+
+    gateway.store.setRole('member');
+    await expect(gateway.moderateObservation(row.id, 'hide', 'DATA_ERROR')).rejects.toThrow(
+      'DEMO_FORBIDDEN',
+    );
+    expect(await gateway.getModerationJournal()).toHaveLength(0);
+  });
+
+  it('модерация: скрытие с причиной попадает в журнал, восстановление возвращает запись (US-09)', async () => {
+    const gateway = new DemoGateway(new Date(NOW));
+    gateway.store.setRole('admin');
+    const attemptId = crypto.randomUUID();
+    const session = await gateway.createTestSession(
+      { attemptId, trafficLimitBytes: 1024 },
+      'token',
+      'key',
+    );
+    const cellId = 'demo-izh-v1:15:15';
+    await gateway.submitObservation(buildMeasurement(attemptId, session.id, cellId), 'token', 'key');
+
+    const result = await gateway.moderateObservation(
+      gateway.store.list().find((o) => o.cellId === cellId)!.id,
+      'hide',
+      'DATA_ERROR',
+    );
+    expect(result.status).toBe('hidden');
+    expect(result.recalculation).toBe('pending');
+
+    const hidden = gateway.store.list().find((o) => o.cellId === cellId)!;
+    expect(hidden.status).toBe('hidden');
+
+    const journal = await gateway.getModerationJournal();
+    expect(journal).toHaveLength(1);
+    expect(journal[0]).toMatchObject({
+      action: 'hide',
+      reasonCode: 'DATA_ERROR',
+      reasonLabel: 'Ошибка данных замера',
+      observationId: hidden.id,
+    });
+
+    await gateway.moderateObservation(hidden.id, 'restore', 'DATA_ERROR');
+    expect(gateway.store.list().find((o) => o.cellId === cellId)!.status).toBe('active');
+    expect((await gateway.getModerationJournal()).map((entry) => entry.action)).toEqual([
+      'hide',
+      'restore',
+    ]);
+  });
+
+  it('админ-список отдаёт записи без авторов и с агрегированными показателями (US-09)', async () => {
+    const gateway = new DemoGateway(new Date(NOW));
+    const rows = await gateway.getAdminObservations();
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(['guest', 'member']).toContain(row.authorKind);
+      expect(row.occurredAt).toBeTruthy();
+      if (row.kind === 'failure-event') {
+        expect(row.downloadMbps).toBeNull();
+      }
+    }
+  });
 });

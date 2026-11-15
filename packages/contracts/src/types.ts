@@ -190,9 +190,41 @@ export interface ProfileRef {
   maxRttMs: number;
 }
 
+export interface ModerationReason {
+  code: string;
+  label: string;
+}
+
 export interface CatalogResponse {
   operators: OperatorRef[];
   profiles: ProfileRef[];
+  /** Справочник причин модерации (US-09): свободный текст исключён. */
+  moderationReasons: ModerationReason[];
   methodologyVersion: string;
   gridVersion: string;
+}
+
+/** Строка списка записей для модерации (US-09, доступ администратора). */
+export interface AdminObservation {
+  id: UUID;
+  cellId: string;
+  kind: 'measurement' | 'failure-event';
+  status: 'active' | 'hidden';
+  occurredAt: Instant;
+  authorKind: 'guest' | 'member';
+  downloadMbps: number | null;
+  uploadMbps: number | null;
+  rttMs: number | null;
+  errorCode: string | null;
+}
+
+/** Запись журнала решений модерации (NFR-09): кто, когда, что и почему. */
+export interface ModerationActionEntry {
+  id: UUID;
+  observationId: UUID;
+  moderatorId: UUID;
+  action: 'hide' | 'restore';
+  reasonCode: string;
+  reasonLabel: string;
+  createdAt: Instant;
 }

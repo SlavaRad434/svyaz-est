@@ -24,6 +24,7 @@ import {
 import {
   failureEventInputSchema,
   measurementInputSchema,
+  type AdminObservation,
   type Bbox,
   type CatalogResponse,
   type CellFilters,
@@ -34,11 +35,14 @@ import {
   type GridConfig,
   type MapCellsResponse,
   type MeasurementInput,
+  type ModerationAction,
+  type ModerationActionEntry,
+  type ModerationResult,
   type ObservationReceipt,
   type TestSession,
   type UUID,
 } from '@svyaz-est/contracts';
-import { buildDemoCatalog } from './catalog';
+import { buildDemoCatalog, moderationReasonLabel } from './catalog';
 import { buildDemoObservations } from './datasets';
 import { DemoStore } from './DemoStore';
 
@@ -140,6 +144,48 @@ export class DemoGateway implements DataGateway {
       filters,
       now: new Date().toISOString(),
     });
+  }
+
+  /** US-09: список записей для панели модерации (без авторов и координат). */
+  async getAdminObservations(): Promise<AdminObservation[]> {
+    return this.store.list().map((observation) => ({
+      id: observation.id,
+      cellId: observation.cellId,
+      kind: observation.kind,
+      status: observation.status,
+      occurredAt: observation.occurredAt,
+      authorKind: observation.authorId === null ? 'guest' : 'member',
+      downloadMbps: observation.metrics?.downloadMbps ?? null,
+      uploadMbps: observation.metrics?.uploadMbps ?? null,
+      rttMs: observation.metrics?.rttMs ?? null,
+      errorCode: null,
+    }));
+  }
+
+  /** US-09: скрыть/восстановить запись. Не админ получает отказ (NFR-04). */
+  async moderateObservation(
+    observationId: UUID,
+    action: ModerationAction,
+    reasonCode: string,
+  ): Promise<ModerationResult> {
+    if (this.store.role !== 'admin') {
+      throw new Error('DEMO_FORBIDDEN: модерация доступна только администратору');
+    }
+    const reasonLabel = moderationReasonLabel(reasonCode);
+    const applied = this.store.moderate(observationId, action, reasonCode, reasonLabel);
+    if (!applied) {
+      throw new Error('DEMO_NOT_FOUND: запись не найдена');
+    }
+    return {
+      id: observationId,
+      status: action === 'hide' ? 'hidden' : 'active',
+      recalculation: 'pending',
+    };
+  }
+
+  /** US-09 / NFR-09: журнал решений модерации. */
+  async getModerationJournal(): Promise<ModerationActionEntry[]> {
+    return [...this.store.listModerationActions()];
   }
 
   async createTestSession(

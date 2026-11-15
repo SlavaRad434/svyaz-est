@@ -3,6 +3,7 @@
  * Изолировано от реальных данных, доступно только демо-адаптеру.
  */
 import type { EvaluationObservation } from '@svyaz-est/domain';
+import type { ModerationActionEntry } from '@svyaz-est/contracts';
 
 export type DemoRole = 'guest' | 'member' | 'admin';
 
@@ -14,6 +15,8 @@ export class DemoStore {
   private listeners = new Set<() => void>();
   private roleValue: DemoRole = 'guest';
   private version = 0;
+  /** Журнал решений модерации (US-09, NFR-09): кто, когда, что и почему. */
+  private moderationActions: ModerationActionEntry[] = [];
 
   constructor() {
     this.reset();
@@ -21,6 +24,7 @@ export class DemoStore {
 
   reset(): void {
     this.observations = [];
+    this.moderationActions = [];
     this.version += 1;
     this.emit();
   }
@@ -75,6 +79,46 @@ export class DemoStore {
     this.version += 1;
     this.emit();
     return true;
+  }
+
+  /**
+   * US-09: решение модератора с обязательной причиной — попадает в журнал
+   * (NFR-09: кто, когда, что, почему) и меняет статус записи.
+   */
+  moderate(
+    observationId: string,
+    action: 'hide' | 'restore',
+    reasonCode: string,
+    reasonLabel: string,
+  ): boolean {
+    const target = this.observations.find((o) => o.id === observationId);
+    if (!target) {
+      return false;
+    }
+    const status = action === 'hide' ? 'hidden' : 'active';
+    if (!this.setStatus(observationId, status)) {
+      return false;
+    }
+    this.moderationActions = [
+      ...this.moderationActions,
+      {
+        id: crypto.randomUUID(),
+        observationId,
+        moderatorId: DEMO_MEMBER_ID,
+        action,
+        reasonCode,
+        reasonLabel,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    this.version += 1;
+    this.emit();
+    return true;
+  }
+
+  /** Журнал решений (только чтение). */
+  listModerationActions(): readonly ModerationActionEntry[] {
+    return this.moderationActions;
   }
 
   /** Демо-помощник: «вчерашние» гостевые замеры в ячейку (для быстрой окраски). */

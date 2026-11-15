@@ -8,6 +8,7 @@ import { Link, Route, Routes } from 'react-router-dom';
 import { Button, Group, Title } from '@mantine/core';
 import { MapPage } from './pages/MapPage';
 import { MethodologyPage } from './pages/MethodologyPage';
+import { ModerationPage } from './pages/ModerationPage';
 import { TestPage } from './pages/TestPage';
 import { DemoMenu } from './components/DemoPanel';
 import { flushPendingQueue } from './lib/delivery';
@@ -42,12 +43,22 @@ export function App() {
           >
             Методика
           </Button>
+          <Button
+            component={Link}
+            to="/admin"
+            variant="light"
+            size="compact-md"
+            className="tap-target"
+          >
+            Модерация
+          </Button>
         </Group>
       </header>
       <div className="app-content">
         <Routes>
           <Route path="/" element={<MapPage />} />
           <Route path="/methodology" element={<MethodologyPage />} />
+          <Route path="/admin" element={<ModerationPage />} />
           <Route path="/test" element={<TestPage />} />
           <Route path="*" element={<MapPage />} />
         </Routes>

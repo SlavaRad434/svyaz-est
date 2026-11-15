@@ -3,6 +3,7 @@
  * Демо- и HTTP-реализации соблюдают один контракт.
  */
 import type {
+  AdminObservation,
   Bbox,
   CatalogResponse,
   CellFilters,
@@ -12,10 +13,19 @@ import type {
   GridConfig,
   MapCellsResponse,
   MeasurementInput,
+  ModerationActionEntry,
   ObservationReceipt,
   TestSession,
   UUID,
 } from './types';
+
+export type ModerationAction = 'hide' | 'restore';
+
+export interface ModerationResult {
+  id: UUID;
+  status: 'active' | 'hidden';
+  recalculation: 'pending';
+}
 
 export interface DataGateway {
   getGrid(signal?: AbortSignal): Promise<GridConfig>;
@@ -41,4 +51,15 @@ export interface DataGateway {
     token: string,
     idempotencyKey: UUID,
   ): Promise<ObservationReceipt>;
+  /** US-09: список записей для модерации (только администратор). */
+  getAdminObservations(signal?: AbortSignal): Promise<AdminObservation[]>;
+  /** US-09: скрыть/восстановить запись с обязательной причиной из справочника. */
+  moderateObservation(
+    observationId: UUID,
+    action: ModerationAction,
+    reasonCode: string,
+    signal?: AbortSignal,
+  ): Promise<ModerationResult>;
+  /** US-09 / NFR-09: журнал решений модерации. */
+  getModerationJournal(signal?: AbortSignal): Promise<ModerationActionEntry[]>;
 }
