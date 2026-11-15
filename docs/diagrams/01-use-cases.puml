@@ -1,0 +1,94 @@
+@startuml
+!pragma layout smetana
+title СвязьЕсть — варианты использования
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Гость" as Guest
+actor "Участник" as Member
+actor "Администратор" as Admin
+Guest <|-- Member
+Member <|-- Admin
+
+rectangle "СвязьЕсть" {
+  usecase "Смотреть карту" as Map
+  usecase "Менять фильтры" as Filters
+  usecase "Выбирать тип задачи" as Profile
+  usecase "Открыть карточку зоны" as Card
+  usecase "Получить оценку зоны" as Score
+  usecase "Читать методику" as Method
+  usecase "Проверить достаточность" as Sufficiency
+  usecase "Возможность авторизации" as Login
+  usecase "Запустить тест" as Test
+  usecase "Получить доступные\nметаданные" as Metadata
+  usecase "Выполнить измерение" as Measure
+  usecase "Проверить результат" as Validate
+  usecase "Автоматически сохранить\nнаблюдение" as Save
+  usecase "Просматривать автоматически\nсохранённые события" as Events
+  usecase "Смотреть свои записи" as Own
+  usecase "Удалить свой вклад" as Delete
+  usecase "Проверить владельца" as Owner
+  usecase "Обновить оценку" as Refresh
+  usecase "Удалить аккаунт" as Account
+  usecase "Выйти" as Logout
+  usecase "Просматривать записи\nдля модерации" as Review
+  usecase "Скрыть запись" as Hide
+  usecase "Восстановить запись" as Restore
+  usecase "Записать решение в журнал" as Audit
+  usecase "Смотреть журнал решений" as Journal
+}
+
+Guest --> Map
+Guest --> Filters
+Guest --> Profile
+Guest --> Card
+Guest --> Method
+Guest --> Login
+Guest --> Test
+Map ..> Score : <<include>>
+Card ..> Score : <<include>>
+Score ..> Sufficiency : <<include>>
+Test ..> Metadata : <<include>>
+Test ..> Measure : <<include>>
+Test ..> Validate : <<include>>
+Test ..> Save : <<include>>
+
+Member --> Events
+Member --> Own
+Member --> Delete
+Member --> Account
+Member --> Logout
+Delete ..> Owner : <<include>>
+Delete ..> Refresh : <<include>>
+
+Admin --> Review
+Admin --> Hide
+Admin --> Restore
+Admin --> Journal
+Hide ..> Audit : <<include>>
+Hide ..> Refresh : <<include>>
+Restore ..> Audit : <<include>>
+Restore ..> Refresh : <<include>>
+
+note bottom of Test
+  Гость выполняет тест и отправляет результат.
+  У гостевого замера автор отсутствует (NULL).
+  Токен попытки не является аккаунтом.
+  При сбое сохраняется событие ошибки,
+  а не замер с нулевой скоростью.
+end note
+
+note bottom of Save
+  Данные собираются автоматически,
+  без ручного ввода и исправления.
+  Локальная очередь сохраняет наблюдение
+  до подтверждения отправки.
+end note
+
+note bottom of Account
+  Защищённые действия требуют действующей
+  сессии и соответствующих прав.
+  Повторный вход при каждом действии не нужен.
+end note
+@enduml

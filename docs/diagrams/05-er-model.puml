@@ -1,0 +1,207 @@
+@startuml
+!pragma layout smetana
+title СвязьЕсть — ER-модель данных
+top to bottom direction
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam nodesep 55
+skinparam ranksep 75
+skinparam classAttributeIconSize 0
+skinparam defaultFontName SansSerif
+hide methods
+hide stereotypes
+
+entity "Пользователи\nusers" as users {
+  id [PK]
+  --
+  identity_provider
+  provider_subject
+  role
+  created_at
+  --
+  UNIQUE(identity_provider, provider_subject)
+}
+
+entity "Сессии входа\nsessions" as sessions {
+  id [PK]
+  --
+  user_id [FK]
+  token_hash
+  expires_at
+  revoked_at
+}
+
+entity "Тестовые сессии\ntest_sessions" as test_sessions {
+  id [PK]
+  --
+  user_id [FK, NULL]
+  attempt_id [UNIQUE]
+  attempt_token_hash
+  accept_until
+  method_version
+  server_id
+  started_at
+  expires_at
+  traffic_limit_bytes
+  status
+}
+
+entity "Операторы\noperators" as operators {
+  id [PK]
+  --
+  name
+  is_active
+}
+
+entity "Ячейки карты\ngrid_cells" as grid_cells {
+  id [PK]
+  --
+  geometry
+  grid_version
+  column_index
+  row_index
+}
+
+entity "Наблюдения\nobservations" as observations {
+  id [PK]
+  --
+  attempt_id [UNIQUE]
+  author_id [FK, NULL]
+  cell_id [FK, NULL]
+  operator_id [FK, NULL]
+  kind
+  occurred_at
+  submitted_at
+  environment
+  status
+}
+
+entity "Детали замера\nmeasurement_details" as measurement_details {
+  observation_id [PK, FK]
+  --
+  network_type
+  transport
+  vpn
+  download_mbps
+  upload_mbps
+  rtt_ms
+  source
+  input_method
+  test_session_id [FK, UNIQUE]
+  method_version
+  metadata_provenance
+}
+
+entity "Детали события ошибки\ncomplaint_details" as complaint_details {
+  observation_id [PK, FK]
+  --
+  stage
+  method_version
+  metadata
+  test_session_id [FK, NULL]
+  error_code
+}
+
+entity "Версии методики оценки\nmethodology_versions" as methodology_versions {
+  id [PK]
+  --
+  version [UNIQUE]
+  window_days
+  half_life_days
+  min_samples
+  min_dates
+  effective_from
+}
+
+entity "Профили задач\ntask_profiles" as task_profiles {
+  id [PK]
+  --
+  methodology_id [FK]
+  code
+  name
+  min_download
+  min_upload
+  max_rtt
+}
+
+entity "История модерации\nmoderation_actions" as moderation_actions {
+  id [PK]
+  --
+  observation_id [FK]
+  moderator_id [FK]
+  action
+  reason
+  created_at
+}
+
+entity "Повторяемые запросы\nidempotency_requests" as idempotency_requests {
+  id [PK]
+  --
+  attempt_id
+  attempt_token_hash
+  operation
+  key
+  payload_hash
+  result_id
+  created_at
+  --
+  UNIQUE(attempt_id, operation, key)
+}
+
+entity "Журнал удалений\ndeletion_events" as deletion_events {
+  id [PK]
+  --
+  target_type
+  target_id
+  requested_at
+  completed_at
+  purge_after
+}
+
+users ||--o{ sessions
+users |o--o{ test_sessions
+users |o--o{ observations : автор
+users ||--o{ moderation_actions : администратор
+
+operators |o--o{ observations
+grid_cells |o--o{ observations
+observations ||--o| measurement_details
+observations ||--o| complaint_details
+observations ||--o{ moderation_actions
+test_sessions ||--o| measurement_details
+test_sessions |o--o{ complaint_details
+
+methodology_versions ||--o{ task_profiles
+
+note bottom of observations
+  Ровно один набор деталей по kind:
+  замер ИЛИ событие ошибки (XOR).
+  Для замера на карте ячейка обязательна.
+  Гостевой author_id = NULL.
+  Точные координаты пользователя не хранятся.
+end note
+
+note bottom of grid_cells
+  Квадраты 250 x 250 м в проекции пилота.
+end note
+
+note bottom of idempotency_requests
+  attempt_id — отдельная попытка, не ID гостя.
+  Токен проверяется перед возвратом квитанции.
+end note
+
+note bottom of deletion_events
+  target_type + target_id определяют
+  удалённый объект. FK не задан:
+  журнал нужен и после удаления объекта.
+end note
+
+legend bottom
+  Проектная модель; физические типы столбцов пока не заданы.
+  PK — первичный ключ; FK — внешний ключ; UNIQUE — уникальность.
+  NULL явно отмечен у необязательных связей; полная NULL-модель ещё не задана.
+  Кратности: || — ровно 1; o| — 0..1; o{ — 0..N.
+  result_id — идентификатор результата операции; FK в текущей модели не задан.
+  method_version — версия измерителя; methodology_versions — методика оценки.
+endlegend
+@enduml
