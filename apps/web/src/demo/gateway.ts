@@ -67,6 +67,8 @@ export class DemoGateway implements DataGateway {
   private readonly sessions = new Map<UUID, DemoTestSession>();
   private readonly sessionByKey = new Map<string, DemoTestSession>();
   private readonly receipts = new Map<string, ObservationReceipt>();
+  /** Имитация разрыва сети: следующая отправка упадёт (демонстрация US-12). */
+  failNextSubmit = false;
   /** Кэш группировки: пересбор нужен только при смене ребра или данных. */
   private groupCache: {
     edgeMeters: number;
@@ -177,6 +179,10 @@ export class DemoGateway implements DataGateway {
     token: string,
     idempotencyKey: UUID,
   ): Promise<ObservationReceipt> {
+    if (this.failNextSubmit) {
+      this.failNextSubmit = false;
+      throw new Error('DEMO_NETWORK_DOWN: соединение потеряно, запись осталась в локальной очереди');
+    }
     const existing = this.receipts.get(idempotencyKey);
     if (existing) {
       return existing;

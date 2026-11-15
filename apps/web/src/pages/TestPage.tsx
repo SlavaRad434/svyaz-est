@@ -2,6 +2,8 @@
  * Экран теста связи: подготовка → измерение → автоматический результат.
  * Все данные заполняются автоматически; редактируемых полей нет.
  * Отмена не создаёт события сетевой ошибки; сбой — отдельное событие.
+ * US-12: запись сначала сохраняется в локальной очереди, затем доставляется;
+ * при разрыве сети остаётся в очереди и доставляется повторно.
  */
 import { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -15,6 +17,8 @@ import {
   type DemoTestResult,
   type DemoTestStage,
 } from '../demo/simulator';
+import { pendingQueue } from '../lib/queue';
+import { flushPendingQueue } from '../lib/delivery';
 import { useSyncExternalStore } from 'react';
 
 type Phase =
@@ -27,6 +31,8 @@ type Phase =
       result: DemoTestResult;
       receipt: ObservationReceipt | null;
       submitError: string | null;
+      /** Записи, оставшиеся в локальной очереди (US-12). */
+      pending: number;
     };
 
 const OUTCOME_PRESETS = [
@@ -71,27 +77,35 @@ export function TestPage() {
         onStage: (stage) => setPhase({ name: 'running', stage }),
       });
       if (result.kind === 'cancelled') {
-        setPhase({ name: 'done', result, receipt: null, submitError: null });
+        setPhase({ name: 'done', result, receipt: null, submitError: null, pending: pendingQueue.list().length });
         return;
       }
       if (result.kind === 'local-only') {
         // Локальный результат: публикация на карте невозможна.
-        setPhase({ name: 'done', result, receipt: null, submitError: null });
+        setPhase({ name: 'done', result, receipt: null, submitError: null, pending: pendingQueue.list().length });
         return;
       }
-      setPhase({ name: 'submitting' });
-      const receipt = await demoGateway.submitObservation(
-        result.input,
+      // US-12: сначала локальное сохранение, затем попытка доставки. Повтор
+      // доставки идёт с теми же attemptToken и ключом — дубля не будет.
+      pendingQueue.enqueue({
+        input: result.input,
         attemptToken,
         idempotencyKey,
-      );
-      setPhase({ name: 'done', result, receipt, submitError: null });
+        enqueuedAt: new Date().toISOString(),
+      });
+      setPhase({ name: 'submitting' });
+      let receipt: ObservationReceipt | null = null;
+      await flushPendingQueue((value) => {
+        receipt = value;
+      });
+      setPhase({ name: 'done', result, receipt, submitError: null, pending: pendingQueue.list().length });
     } catch (error) {
       setPhase({
         name: 'done',
         result: { kind: 'cancelled' },
         receipt: null,
         submitError: error instanceof Error ? error.message : 'Неизвестная ошибка',
+        pending: pendingQueue.list().length,
       });
     } finally {
       abortRef.current = null;
@@ -103,6 +117,28 @@ export function TestPage() {
   }, []);
 
   const reset = useCallback(() => setPhase({ name: 'idle' }), []);
+
+  /** Повторная волна доставки очереди (кнопка «Доставить сейчас»). */
+  const retryDelivery = useCallback(async () => {
+    let receipt: ObservationReceipt | null = null;
+    try {
+      await flushPendingQueue((value) => {
+        receipt = receipt ?? value;
+      });
+    } catch {
+      /* ошибка доставки фиксируется в очереди, записи остаются сохранёнными */
+    }
+    setPhase((current) => {
+      if (current.name !== 'done') {
+        return current;
+      }
+      return {
+        ...current,
+        receipt: current.receipt ?? receipt,
+        pending: pendingQueue.list().length,
+      };
+    });
+  }, []);
 
   return (
     <Stack mih="100%" p="md" gap="md">
@@ -178,7 +214,12 @@ export function TestPage() {
           )}
 
           {phase.name === 'done' && (
-            <DoneView phase={phase} onMap={() => navigate('/')} onRepeat={reset} />
+            <DoneView
+              phase={phase}
+              onMap={() => navigate('/')}
+              onRepeat={reset}
+              onRetryDelivery={() => void retryDelivery()}
+            />
           )}
         </Stack>
       </Card>
@@ -192,18 +233,21 @@ function DoneView({
   phase,
   onMap,
   onRepeat,
+  onRetryDelivery,
 }: {
   phase: Extract<Phase, { name: 'done' }>;
   onMap: () => void;
   onRepeat: () => void;
+  onRetryDelivery: () => void;
 }) {
-  const { result, receipt, submitError } = phase;
+  const { result, receipt, submitError, pending } = phase;
   if (submitError) {
     return (
       <Stack gap="sm">
         <Alert color="red" title="Не удалось подтвердить отправку">
           {submitError}
         </Alert>
+        <PendingNotice pending={pending} onRetryDelivery={onRetryDelivery} />
         <Group>
           <Button onClick={onRepeat} className="tap-target">Повторить тест</Button>
           <Button variant="light" onClick={onMap} className="tap-target">
@@ -219,6 +263,7 @@ function DoneView({
         <Alert color="gray" title="Тест отменён">
           Отмена не создаёт события сетевой ошибки.
         </Alert>
+        <PendingNotice pending={pending} onRetryDelivery={onRetryDelivery} />
         <Group>
           <Button onClick={onRepeat} className="tap-target">Повторить тест</Button>
           <Button variant="light" onClick={onMap} className="tap-target">
@@ -262,6 +307,7 @@ function DoneView({
             ошибок ячейки.
           </Text>
         )}
+        <PendingNotice pending={pending} onRetryDelivery={onRetryDelivery} />
         <Group>
           <Button onClick={onRepeat} className="tap-target">Повторить тест</Button>
           <Button variant="light" onClick={onMap} className="tap-target">
@@ -275,10 +321,12 @@ function DoneView({
     result.input.operatorId === null || result.input.transport === 'unknown';
   return (
     <Stack gap="sm">
-      <Alert color="green" title="Замер выполнен и принят">
-        {excludedByMetadata
-          ? 'Запись сохранена, но не входит в мобильный рейтинг: метаданные недоступны (оператор/транспорт неизвестны).'
-          : 'Запись сохранена и участвует в оценке ячейки после общих проверок.'}
+      <Alert color={pending > 0 ? 'orange' : 'green'} title={pending > 0 ? 'Замер выполнен, отправка не подтверждена' : 'Замер выполнен и принят'}>
+        {pending > 0
+          ? 'Результат сохранён в локальной очереди и будет доставлен автоматически при восстановлении связи.'
+          : excludedByMetadata
+            ? 'Запись сохранена, но не входит в мобильный рейтинг: метаданные недоступны (оператор/транспорт неизвестны).'
+            : 'Запись сохранена и участвует в оценке ячейки после общих проверок.'}
         {receipt && ` Квитанция ${receipt.id.slice(0, 8)}… от ${receipt.submittedAt}.`}
       </Alert>
       <MetricsView
@@ -286,6 +334,7 @@ function DoneView({
         uploadMbps={result.input.uploadMbps}
         rttMs={result.input.rttMs}
       />
+      <PendingNotice pending={pending} onRetryDelivery={onRetryDelivery} />
       <Group>
         <Button onClick={onMap} className="tap-target">К карте</Button>
         <Button variant="light" onClick={onRepeat} className="tap-target">
@@ -293,6 +342,28 @@ function DoneView({
         </Button>
       </Group>
     </Stack>
+  );
+}
+
+function PendingNotice({
+  pending,
+  onRetryDelivery,
+}: {
+  pending: number;
+  onRetryDelivery: () => void;
+}) {
+  if (pending <= 0) {
+    return null;
+  }
+  return (
+    <Group justify="space-between" gap="xs" wrap="nowrap">
+      <Text size="sm" c="orange">
+        В локальной очереди: <b>{pending}</b> — доставка повторится автоматически.
+      </Text>
+      <Button variant="light" size="compact-sm" onClick={onRetryDelivery} style={{ flexShrink: 0 }}>
+        Доставить сейчас
+      </Button>
+    </Group>
   );
 }
 

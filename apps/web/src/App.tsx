@@ -1,15 +1,23 @@
 /**
  * Корень приложения: шапка с демо-меню и область контента с прокруткой.
- * Футера нет: демо-действия переехали в поповер бейджа «Демо».
+ * При старте доставляются записи, оставшиеся в локальной очереди (US-12):
+ * «повтор отправки при открытом приложении» без участия пользователя.
  */
+import { useEffect } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { Button, Group, Title } from '@mantine/core';
 import { MapPage } from './pages/MapPage';
 import { MethodologyPage } from './pages/MethodologyPage';
 import { TestPage } from './pages/TestPage';
 import { DemoMenu } from './components/DemoPanel';
+import { flushPendingQueue } from './lib/delivery';
 
 export function App() {
+  useEffect(() => {
+    // US-12: повторная доставка сохранённых записей при открытии приложения.
+    void flushPendingQueue();
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <header className="app-header">
