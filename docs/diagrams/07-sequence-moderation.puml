@@ -1,0 +1,41 @@
+@startuml
+title СвязьЕсть — модерация записи администратором: журнал и пересчёт (US-09, NFR-04/08/09)
+skinparam shadowing false
+skinparam sequenceMessageArrowThickness 1.4
+
+actor "Администратор" as Admin
+participant "Панель модерации\n(ModerationPage)" as UI
+participant "DataGateway\n(демо-адаптер)" as GW
+database "Хранилище\n(DemoStore)" as Store
+database "Журнал решений\n(NFR-09)" as Journal
+participant "Ядро оценки\n(evaluateCell)" as Eval
+participant "Карта и карточка" as Map
+
+Admin -> UI : открыть раздел «Модерация»
+UI -> GW : проверка роли
+alt Роль ≠ администратор (гость / участник)
+  GW --> UI : DEMO_FORBIDDEN
+  UI --> Admin : явный отказ —\nоперации аккаунта и модерации недоступны
+else Роль = администратор
+  UI -> GW : getAdminObservations(), getModerationJournal()
+  GW --> UI : записи (без координат) + журнал решений
+  Admin -> UI : выбрать запись и причину\n(справочник — свободный текст исключён)
+  UI -> GW : moderateObservation(id, hide, reasonCode)
+  GW -> GW : повторная проверка роли
+  GW -> Store : статус записи → hidden
+  GW -> Journal : добавить решение:\nкто, когда, что, причина
+  GW --> UI : ModerationResult (recalculation: pending)
+  UI -> GW : пересчёт агрегатов (getMapCells / getCellSummary)
+  GW -> Eval : evaluateCell по текущим данным
+  note right of Eval : Скрытые записи исключены;\nесли выборки меньше минимума — серый статус
+  Eval --> Map : новые статусы ячеек
+  UI --> Admin : «Скрыта» + запись в журнале
+  opt Восстановление
+    Admin -> UI : «Восстановить» с причиной
+    UI -> GW : moderateObservation(id, restore, reasonCode)
+    GW -> Store : статус → active
+    GW -> Journal : решение зафиксировано
+    GW -> Eval : пересчёт — запись участвует снова
+  end
+end
+@enduml

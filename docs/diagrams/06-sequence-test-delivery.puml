@@ -1,0 +1,46 @@
+@startuml
+title СвязьЕсть — запуск теста гостем: измерение, локальная очередь, доставка (US-06/12/17, NFR-07)
+skinparam shadowing false
+skinparam sequenceMessageArrowThickness 1.4
+
+actor "Гость" as Guest
+participant "Экран теста\n(TestPage)" as UI
+participant "Измеритель\n(симулятор / этап 8)" as Meter
+participant "Локальная очередь\n(PendingQueue)" as Queue
+participant "DataGateway\n(демо-адаптер)" as GW
+database "Хранилище\n(DemoStore)" as Store
+participant "Карта" as Map
+
+Guest -> UI : Запустить тест
+UI -> GW : createTestSession(attemptId, token, ключ)
+GW -> Store : зафиксировать сессию (user_id = NULL — гость)
+GW --> UI : TestSession (сроки, лимит трафика)
+
+UI -> Meter : измерить download / upload / RTT
+Meter --> UI : MeasurementInput (заполнен автоматически)
+
+UI -> Queue : enqueue(input, attemptToken, ключ)\n**сначала локальное сохранение**
+note right of Queue : Запись переживает перезагрузку (localStorage)
+
+UI -> GW : попытка доставки (submitObservation)
+alt Сеть доступна
+  GW -> GW : проверка токена попытки,\nвалидация, ключ идемпотентности
+  GW -> Store : сохранить наблюдение\nи квитанцию атомарно
+  GW --> UI : ObservationReceipt
+  UI -> Queue : remove(id)
+  Queue --> UI : очередь пуста
+  UI --> Guest : «Замер выполнен и принят»
+  UI -> Map : данные обновились —\nячейка перекрашена (гость участвует наравне)
+else Разрыв сети (failNextSubmit)
+  GW --> UI : DEMO_NETWORK_DOWN
+  UI -> Queue : markFailed (attempts + 1)
+  UI --> Guest : «Сохранено локально —\nдоставится автоматически»
+else Повтор при открытом приложении / «Доставить сейчас»
+  Guest -> UI : вернулась сеть
+  UI -> GW : повтор с теми же attemptToken и ключом
+  GW -> GW : операция уже сохранена?
+  GW --> UI : прежняя квитанция (**дубля нет**)
+  UI -> Queue : remove(id)
+  UI -> Map : наблюдение появилось на карте
+end
+@enduml
