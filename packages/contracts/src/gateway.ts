@@ -15,6 +15,7 @@ import type {
   MeasurementInput,
   ModerationActionEntry,
   ObservationReceipt,
+  OwnObservation,
   TestSession,
   UUID,
 } from './types';
@@ -62,4 +63,10 @@ export interface DataGateway {
   ): Promise<ModerationResult>;
   /** US-09 / NFR-09: журнал решений модерации. */
   getModerationJournal(signal?: AbortSignal): Promise<ModerationActionEntry[]>;
+  /** US-10: собственные записи участника (гость — пусто, вход требуется). */
+  getMyObservations(signal?: AbortSignal): Promise<OwnObservation[]>;
+  /** US-10: удалить свой вклад (чужое удаление запрещено). */
+  deleteObservation(observationId: UUID, signal?: AbortSignal): Promise<void>;
+  /** US-10: удалить аккаунт со всеми своими записями; завершает сессию. */
+  deleteAccount(signal?: AbortSignal): Promise<{ requestId: UUID; status: 'accepted' }>;
 }

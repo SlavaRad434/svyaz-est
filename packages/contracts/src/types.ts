@@ -228,3 +228,23 @@ export interface ModerationActionEntry {
   reasonLabel: string;
   createdAt: Instant;
 }
+
+/** Собственная запись участника (US-10, раздел «Мои записи»). */
+export interface OwnObservation {
+  id: UUID;
+  cellId: string;
+  kind: 'measurement' | 'failure-event';
+  status: 'active' | 'hidden';
+  occurredAt: Instant;
+  downloadMbps: number | null;
+  uploadMbps: number | null;
+  rttMs: number | null;
+}
+
+/** Журнал удалений (NFR-05/09): переживает удалённые объекты для бэкапов. */
+export interface DeletionEventEntry {
+  id: UUID;
+  targetType: 'observation' | 'account';
+  targetId: UUID;
+  requestedAt: Instant;
+}

@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MeasurementInput, UUID } from '@svyaz-est/contracts';
 import { DemoGateway } from './gateway';
+import { DEMO_MEMBER_ID } from './DemoStore';
 import { InMemoryAdapter, PendingQueue } from '../lib/queue';
 
 const NOW = '2026-11-15T12:00:00.000Z';
@@ -224,5 +225,63 @@ describe('DemoGateway — интеграция', () => {
         expect(row.downloadMbps).toBeNull();
       }
     }
+  });
+
+  it('участник видит только свои записи и удаляет свой вклад (US-10)', async () => {
+    const gateway = new DemoGateway(new Date(NOW));
+    gateway.store.setRole('member');
+
+    const attemptId = crypto.randomUUID();
+    const session = await gateway.createTestSession(
+      { attemptId, trafficLimitBytes: 1024 },
+      'token',
+      'key',
+    );
+    const cellId = 'demo-izh-v1:15:15';
+    await gateway.submitObservation(buildMeasurement(attemptId, session.id, cellId), 'token', 'key');
+
+    const mine = await gateway.getMyObservations();
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.cellId).toBe(cellId);
+
+    // Чужое удаление (несуществующий id) запрещено.
+    await expect(gateway.deleteObservation(crypto.randomUUID())).rejects.toThrow('DEMO_FORBIDDEN');
+
+    await gateway.deleteObservation(mine[0]!.id);
+    expect(await gateway.getMyObservations()).toHaveLength(0);
+    expect(gateway.store.list().filter((o) => o.attemptId === attemptId)).toHaveLength(0);
+    // Журнал удалений помнит факт (NFR-05).
+    expect(gateway.store.listDeletionEvents().length).toBeGreaterThan(0);
+  });
+
+  it('удаление аккаунта убирает все записи и завершает сессию (US-10)', async () => {
+    const gateway = new DemoGateway(new Date(NOW));
+    gateway.store.setRole('member');
+    for (let i = 0; i < 2; i += 1) {
+      const attemptId = crypto.randomUUID();
+      const session = await gateway.createTestSession(
+        { attemptId, trafficLimitBytes: 1024 },
+        `token-${i}`,
+        `key-${i}`,
+      );
+      await gateway.submitObservation(buildMeasurement(attemptId, session.id, 'demo-izh-v1:15:15'), `token-${i}`, `key-${i}`);
+    }
+
+    const result = await gateway.deleteAccount();
+    expect(result.status).toBe('accepted');
+
+    // Все записи аккаунта удалены, сессия завершена — роль снова гость.
+    // Записи других авторов (демо-облако) остаются в наблюдениях.
+    expect(await gateway.getMyObservations()).toHaveLength(0);
+    expect(gateway.store.list().filter((o) => o.authorId === DEMO_MEMBER_ID)).toHaveLength(0);
+    expect(gateway.store.role).toBe('guest');
+  });
+
+  it('гость не имеет доступа к операциям аккаунта (US-05/10)', async () => {
+    const gateway = new DemoGateway(new Date(NOW));
+    gateway.store.setRole('guest');
+    expect(await gateway.getMyObservations()).toHaveLength(0);
+    await expect(gateway.deleteObservation(crypto.randomUUID())).rejects.toThrow('DEMO_FORBIDDEN');
+    await expect(gateway.deleteAccount()).rejects.toThrow('DEMO_FORBIDDEN');
   });
 });

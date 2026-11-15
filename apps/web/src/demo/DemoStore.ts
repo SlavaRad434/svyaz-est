@@ -3,7 +3,7 @@
  * Изолировано от реальных данных, доступно только демо-адаптеру.
  */
 import type { EvaluationObservation } from '@svyaz-est/domain';
-import type { ModerationActionEntry } from '@svyaz-est/contracts';
+import type { DeletionEventEntry, ModerationActionEntry } from '@svyaz-est/contracts';
 
 export type DemoRole = 'guest' | 'member' | 'admin';
 
@@ -17,6 +17,8 @@ export class DemoStore {
   private version = 0;
   /** Журнал решений модерации (US-09, NFR-09): кто, когда, что и почему. */
   private moderationActions: ModerationActionEntry[] = [];
+  /** Журнал удалений (US-10, NFR-05): переживает удалённые объекты. */
+  private deletionEvents: DeletionEventEntry[] = [];
 
   constructor() {
     this.reset();
@@ -119,6 +121,58 @@ export class DemoStore {
   /** Журнал решений (только чтение). */
   listModerationActions(): readonly ModerationActionEntry[] {
     return this.moderationActions;
+  }
+
+  /**
+   * US-10: удалить свой вклад. Удаляет только владелец — чужое или гостевое
+   * удаление запрещено. Факт удаления попадает в журнал (NFR-05).
+   */
+  removeObservation(observationId: string, requesterId: string | null): boolean {
+    const target = this.observations.find((o) => o.id === observationId);
+    if (!target || target.authorId === null || target.authorId !== requesterId) {
+      return false;
+    }
+    this.observations = this.observations.filter((o) => o.id !== observationId);
+    this.deletionEvents = [
+      ...this.deletionEvents,
+      {
+        id: crypto.randomUUID(),
+        targetType: 'observation',
+        targetId: observationId as DeletionEventEntry['targetId'],
+        requestedAt: new Date().toISOString(),
+      },
+    ];
+    this.version += 1;
+    this.emit();
+    return true;
+  }
+
+  /**
+   * US-10: удалить аккаунт — все его записи уходят из активной выдачи,
+   * сессия завершается (роль возвращается в гостя). Возвращает число
+   * удалённых записей.
+   */
+  deleteAccount(accountId: string): number {
+    const own = this.observations.filter((o) => o.authorId === accountId);
+    this.observations = this.observations.filter((o) => o.authorId !== accountId);
+    this.deletionEvents = [
+      ...this.deletionEvents,
+      {
+        id: crypto.randomUUID(),
+        targetType: 'account',
+        targetId: accountId as DeletionEventEntry['targetId'],
+        requestedAt: new Date().toISOString(),
+      },
+    ];
+    this.roleValue = 'guest';
+    this.version += 1;
+    this.emit();
+    return own.length;
+  }
+
+  /** Журнал удалений (только чтение). */
+  listDeletionEvents(): readonly DeletionEventEntry[] {
+    return this.deletionEvents;
   }
 
   /** Демо-помощник: «вчерашние» гостевые замеры в ячейку (для быстрой окраски). */

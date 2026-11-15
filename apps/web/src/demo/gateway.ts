@@ -39,6 +39,7 @@ import {
   type ModerationActionEntry,
   type ModerationResult,
   type ObservationReceipt,
+  type OwnObservation,
   type TestSession,
   type UUID,
 } from '@svyaz-est/contracts';
@@ -186,6 +187,49 @@ export class DemoGateway implements DataGateway {
   /** US-09 / NFR-09: журнал решений модерации. */
   async getModerationJournal(): Promise<ModerationActionEntry[]> {
     return [...this.store.listModerationActions()];
+  }
+
+  /** US-10: собственные записи участника; гость не имеет истории. */
+  async getMyObservations(): Promise<OwnObservation[]> {
+    const authorId = this.store.currentAuthorId;
+    if (authorId === null) {
+      return [];
+    }
+    return this.store
+      .list()
+      .filter((observation) => observation.authorId === authorId)
+      .map((observation) => ({
+        id: observation.id,
+        cellId: observation.cellId,
+        kind: observation.kind,
+        status: observation.status,
+        occurredAt: observation.occurredAt,
+        downloadMbps: observation.metrics?.downloadMbps ?? null,
+        uploadMbps: observation.metrics?.uploadMbps ?? null,
+        rttMs: observation.metrics?.rttMs ?? null,
+      }));
+  }
+
+  /** US-10: удалить свой вклад; чужое удаление запрещено (NFR-04). */
+  async deleteObservation(observationId: UUID): Promise<void> {
+    const requesterId = this.store.currentAuthorId;
+    if (requesterId === null) {
+      throw new Error('DEMO_FORBIDDEN: гость не может удалять записи, требуется вход');
+    }
+    const applied = this.store.removeObservation(observationId, requesterId);
+    if (!applied) {
+      throw new Error('DEMO_FORBIDDEN: запись не найдена или принадлежит другому аккаунту');
+    }
+  }
+
+  /** US-10: удалить аккаунт со всеми своими записями и завершить сессию. */
+  async deleteAccount(): Promise<{ requestId: UUID; status: 'accepted' }> {
+    const accountId = this.store.currentAuthorId;
+    if (accountId === null) {
+      throw new Error('DEMO_FORBIDDEN: гость не имеет аккаунта');
+    }
+    this.store.deleteAccount(accountId);
+    return { requestId: crypto.randomUUID(), status: 'accepted' };
   }
 
   async createTestSession(
