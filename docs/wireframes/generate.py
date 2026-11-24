@@ -82,7 +82,7 @@ class Screen:
                 self.rect(xx, yy, size, size, fills[idx], '#777')
                 self.text(xx+10, yy+29, labels[idx], 12, True)
                 self.parts.append('</a>')
-        self.text(x+12, y+24, 'Подложка Яндекс Карт · схема', 12)
+        self.text(x+12, y+24, 'Подложка OpenStreetMap (Leaflet)', 12)
         self.text(x+12, y+h-13, 'Ячейка 250 × 250 м', 12)
 
     def svg(self):
@@ -178,7 +178,7 @@ s = Screen('10-records', 'Мои записи', 'Только участник. 
 s.box(108,'Замер · 27 октября',['12,4 / 4,8 Мбит/с · 82 мс','Сохранён · ячейка 250 × 250 м'])
 s.button(230,'Открыть ячейку','03-card')
 s.button(288,'Удалить запись','12-delete')
-s.box(368,'Событие ошибки · 26 октября',['Тест не завершён','Сохранено · скорость не определена'])
+s.box(368,'Замер · 26 октября',['8,1 / 3,2 Мбит/с · 104 мс','Сохранён · ячейка 250 × 250 м'])
 s.button(490,'Настройки аккаунта','11-account')
 s.button(548,'Очередь на устройстве','09-queue')
 s.footer()
@@ -293,6 +293,6 @@ cards = ''.join(f'<article id="{s.key}" class="{"desktop" if s.width>360 else "m
 html = '''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>СвязьЕсть — wireframes для согласования</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#eee;color:#222;font:15px/1.55 Arial,sans-serif}header{padding:32px 28px;background:#fff;border-bottom:1px solid #bbb}h1{font-size:28px;margin:0 0 10px}header p{max-width:850px;margin:8px 0}nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}a{color:#222}nav a{padding:9px 12px;border:1px solid #aaa;border-radius:4px;text-decoration:none}nav a:hover,nav a:focus{background:#ddd}main{padding:28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:28px;align-items:start}article{scroll-margin:20px;background:#fff;padding:16px;border:1px solid #bbb;border-radius:6px}article h2{font-size:18px;margin:0 0 6px}article p{font-size:13px;min-height:83px;max-width:70ch;margin:0 0 16px}svg{display:block;max-width:100%;height:auto;margin:auto;border:1px solid #aaa}svg a:hover rect,svg a:focus rect{stroke:#000;stroke-width:3}.source{display:block;margin-top:12px;font-size:13px}.desktop{grid-column:1/-1}.desktop p{min-height:0}footer{padding:28px;background:#fff}a:focus-visible{outline:3px solid #555;outline-offset:3px}@media(max-width:420px){header,main{padding:12px}article{padding:8px}article p{min-height:0}}@media print{nav,.source{display:none}main{display:block}article{break-after:page;break-inside:avoid;margin:0;border:0}article svg{max-height:220mm}body{background:#fff}}
-</style><header><h1>СвязьЕсть / предварительные wireframe-ы</h1><p>Редакция 1 · 28 октября 2026 · <strong>На согласовании команды</strong></p><p>20 листов: мобильные формы 360 px, состояния и десктопная карта. Это схемы компоновки, не работающий сервис. Числа демонстрационные; «Оператор А» и кнопка провайдера — обозначения ещё не выбранных данных. Серые заливки не заменяют продуктовые цвета статусов.</p><p>Ссылки на кнопках переводят к соответствующему макету. Они не выполняют вход, удаление, тест или модерацию. Согласование фиксируется в <a href="README.md">листе решений</a>.</p><nav>'''+nav+'</nav></header><main>'+cards+'</main><footer>Карта схематическая. UI kit: Mantine — кандидат; компоненты и состояния согласуются до кода приложения. API Яндекс Карт на этих листах не вызывается.</footer></html>'
+</style><header><h1>СвязьЕсть / предварительные wireframe-ы</h1><p>Редакция 2 · 25 ноября 2026 · <strong>На согласовании команды</strong></p><p>20 листов: мобильные формы 360 px, состояния и десктопная карта. Это схемы компоновки, не работающий сервис. Числа демонстрационные; «Оператор А» и кнопка провайдера — обозначения ещё не выбранных данных. Серые заливки не заменяют продуктовые цвета статусов.</p><p>Ссылки на кнопках переводят к соответствующему макету. Они не выполняют вход, удаление, тест или модерацию. Согласование фиксируется в <a href="README.md">листе решений</a>.</p><nav>'''+nav+'</nav></header><main>'+cards+'</main><footer>Карта схематическая. UI kit: Mantine — кандидат; компоненты и состояния согласуются до кода приложения. Картографический API не вызывается: Leaflet служит только подложкой.</footer></html>'
 (ROOT / 'index.html').write_text(html,encoding='utf-8')
 print(f'Generated {len(SCREENS)} SVG wireframes and index.html')
