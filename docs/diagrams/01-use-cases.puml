@@ -22,10 +22,9 @@ rectangle "СвязьЕсть" {
   usecase "Возможность авторизации" as Login
   usecase "Запустить тест" as Test
   usecase "Получить доступные\nметаданные" as Metadata
+  usecase "Автоматически сохранить\nнаблюдение" as Save
   usecase "Выполнить измерение" as Measure
   usecase "Проверить результат" as Validate
-  usecase "Автоматически сохранить\nнаблюдение" as Save
-  usecase "Просматривать автоматически\nсохранённые события" as Events
   usecase "Смотреть свои записи" as Own
   usecase "Удалить свой вклад" as Delete
   usecase "Проверить владельца" as Owner
@@ -54,7 +53,6 @@ Test ..> Measure : <<include>>
 Test ..> Validate : <<include>>
 Test ..> Save : <<include>>
 
-Member --> Events
 Member --> Own
 Member --> Delete
 Member --> Account
