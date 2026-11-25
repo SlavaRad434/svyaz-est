@@ -53,21 +53,12 @@ entity "Операторы\noperators" as operators {
   is_active
 }
 
-entity "Ячейки карты\ngrid_cells" as grid_cells {
-  id [PK]
-  --
-  geometry
-  grid_version
-  column_index
-  row_index
-}
-
 entity "Наблюдения\nobservations" as observations {
   id [PK]
   --
   attempt_id [UNIQUE]
   author_id [FK, NULL]
-  cell_id [FK, NULL]
+  cell_id [INDEX]
   operator_id [FK, NULL]
   kind
   occurred_at
@@ -102,60 +93,17 @@ entity "Детали события ошибки\ncomplaint_details" as complain
   error_code
 }
 
-entity "Версии методики оценки\nmethodology_versions" as methodology_versions {
-  id [PK]
-  --
-  version [UNIQUE]
-  window_days
-  half_life_days
-  min_samples
-  min_dates
-  effective_from
-}
-
-entity "Профили задач\ntask_profiles" as task_profiles {
-  id [PK]
-  --
-  methodology_id [FK]
-  code
-  name
-  min_download
-  min_upload
-  max_rtt
-}
-
-entity "История модерации\nmoderation_actions" as moderation_actions {
-  id [PK]
-  --
-  observation_id [FK]
-  moderator_id [FK]
-  action
-  reason
-  created_at
-}
-
-entity "Повторяемые запросы\nidempotency_requests" as idempotency_requests {
-  id [PK]
-  --
-  attempt_id
-  attempt_token_hash
-  operation
-  key
-  payload_hash
-  result_id
-  created_at
-  --
-  UNIQUE(attempt_id, operation, key)
-}
-
-entity "Журнал удалений\ndeletion_events" as deletion_events {
+entity "Журнал решений\nmoderation_actions" as moderation_actions {
   id [PK]
   --
   target_type
+  observation_id [FK, NULL]
   target_id
-  requested_at
-  completed_at
-  purge_after
+  moderator_id [FK, NULL]
+  action
+  reason
+  purge_after [NULL]
+  created_at
 }
 
 users ||--o{ sessions
@@ -164,14 +112,9 @@ users |o--o{ observations : автор
 users ||--o{ moderation_actions : администратор
 
 operators |o--o{ observations
-grid_cells |o--o{ observations
 observations ||--o| measurement_details
 observations ||--o| complaint_details
-observations ||--o{ moderation_actions
-test_sessions ||--o| measurement_details
-test_sessions |o--o{ complaint_details
-
-methodology_versions ||--o{ task_profiles
+observations |o--o{ moderation_actions
 
 note bottom of observations
   Ровно один набор деталей по kind:
@@ -179,21 +122,21 @@ note bottom of observations
   Для замера на карте ячейка обязательна.
   Гостевой author_id = NULL.
   Точные координаты пользователя не хранятся.
+  cell_id — текст «версия:столбец:ряд»
+  текущей динамической сетки, отдельной
+  таблицы ячеек в БД нет. Индекс для
+  группировки по ячейкам.
 end note
 
-note bottom of grid_cells
-  Квадраты 250 x 250 м в проекции пилота.
-end note
-
-note bottom of idempotency_requests
-  attempt_id — отдельная попытка, не ID гостя.
-  Токен проверяется перед возвратом квитанции.
-end note
-
-note bottom of deletion_events
-  target_type + target_id определяют
-  удалённый объект. FK не задан:
-  журнал нужен и после удаления объекта.
+note bottom of moderation_actions
+  Единый журнал решений: скрытие и
+  восстановление записи администратором,
+  удаление вклада или аккаунта владельцем.
+  moderator_id = NULL — самоудаление.
+  target_type + target_id — полиморфная
+  ссылка без FK: журнал нужен и после
+  удаления объекта. purge_after — срок
+  очистки по политике резервных копий.
 end note
 
 legend bottom
@@ -201,7 +144,9 @@ legend bottom
   PK — первичный ключ; FK — внешний ключ; UNIQUE — уникальность.
   NULL явно отмечен у необязательных связей; полная NULL-модель ещё не задана.
   Кратности: || — ровно 1; o| — 0..1; o{ — 0..N.
-  result_id — идентификатор результата операции; FK в текущей модели не задан.
-  method_version — версия измерителя; methodology_versions — методика оценки.
+  Идемпотентность повторов обеспечивается
+  UNIQUE(attempt_id) на наблюдениях, без отдельной таблицы.
+  Методика оценки и профили задач — константы кода (packages/domain),
+  в БД не хранятся.
 endlegend
 @enduml
